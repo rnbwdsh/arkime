@@ -108,7 +108,7 @@ export default {
     return {
       molochVersion: this.$constants.MOLOCH_VERSION,
       menuOrder: [
-        'sessions', 'spiview', 'spigraph', 'connections', 'hunt',
+        'sessions', 'spiview', 'spigraph', 'spivis', 'connections', 'hunt',
         'files', 'stats', 'history', 'upload', 'settings', 'users'
       ]
     };
@@ -125,6 +125,7 @@ export default {
         sessions: { title: 'Sessions', link: 'sessions', hotkey: ['Sessions'] },
         spiview: { title: 'SPI View', link: 'spiview', hotkey: ['SPI ', 'View'] },
         spigraph: { title: 'SPI Graph', link: 'spigraph', hotkey: ['SPI ', 'Graph'] },
+        spivis: { title: 'SPI Visualization', link: 'spivis', hotkey: ['SPI', 'Vis'] },
         connections: { title: 'Connections', link: 'connections', hotkey: ['Connections'] },
         files: { title: 'Files', link: 'files', permission: 'hideFiles', reverse: true },
         stats: { title: 'Stats', link: 'stats', permission: 'hideStats', reverse: true },

@@ -209,6 +209,7 @@
         @timeChange="timeChange"
         :hide-interval="hideInterval"
         :updateTime="updateTime">
+        <slot/>
       </moloch-time> <!-- /time inputs -->
 
       <!-- form message -->

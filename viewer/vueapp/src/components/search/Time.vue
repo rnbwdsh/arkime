@@ -232,6 +232,7 @@
       </strong>
     </div> <!-- /human readable time range or error -->
 
+    <slot/>
   </div>
 
 </template>

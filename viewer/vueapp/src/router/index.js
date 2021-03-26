@@ -9,6 +9,7 @@ import ArkimeHistory from '@/components/history/History';
 import Sessions from '@/components/sessions/Sessions';
 import Spiview from '@/components/spiview/Spiview';
 import Spigraph from '@/components/spigraph/Spigraph';
+import Spivis from '@/components/spivis/Spivis';
 import Connections from '@/components/connections/Connections';
 import Settings from '@/components/settings/Settings';
 import Upload from '@/components/upload/Upload';
@@ -72,6 +73,12 @@ const router = new Router({
       component: Spiview
     },
     {
+      path: '/spivis',
+      name: 'Spivis',
+      component: Spivis
+    },
+    {
+
       path: '/spigraph',
       name: 'Spigraph',
       component: Spigraph
