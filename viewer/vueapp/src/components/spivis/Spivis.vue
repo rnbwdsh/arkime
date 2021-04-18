@@ -1,6 +1,6 @@
 <template>
 
-  <div class="spigraph-page">
+  <div class="spivis-page">
     <b-collapse :visible="true">
         <moloch-search
           :num-matching-sessions="filtered"
@@ -18,18 +18,16 @@
         </moloch-search> <!-- /search navbar -->
     </b-collapse>
 
-    <div class="spigraph-content">
-      <div class="row">
-      <div class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6 column">
-      <b-card title="Features" class="smallcard">
+    <b-row class="spivis-content">
+      <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6">
+      <b-card title="Features">
         <template v-for="currentField of FIELD">
           <b-card-text :key="currentField.id" v-if="fieldTypeCount[currentField.id]">
             <strong v-b-toggle="'coll-' + currentField.id" size="sm" variant="secondary">
               <span :class="['fa', currentField.icon]"/> {{currentField.name}}
             </strong>
             <b-collapse :id="'coll-' + currentField.id"
-                        :visible="currentField.id !== FIELD.single.id"
-                        class="fieldCollapse">
+                        :visible="currentField.id !== FIELD.single.id">
               <template v-for="(ele, name) in packetFields">
                   <b-button v-if="fieldTypes[name] === currentField.id"
                             :key="name"
@@ -41,7 +39,7 @@
                             @mouseover="setTooltip"
                             @dragstart="dragstartOriginal">
                     {{name}}
-                    <b-badge variant="default" class="mybadge border">
+                    <b-badge variant="default">
                       {{ ele.length }}
                     </b-badge>
                   </b-button>
@@ -50,17 +48,22 @@
           </b-card-text>
         </template>
       </b-card>
-      </div>
-      <div class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6 column" >
-        <b-card title="Visualization">
+      </b-col>
+      <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6" >
+        <b-card title="Visualization" body-class="flex-wrap d-flex">
           <template v-for="name of Object.keys(names)">
-            <b-input-group :key="name" size="sm" :prepend="`${name}:`">
+            <b-input-group v-if="name !== 'mark'"
+                           :key="name"
+                           size="sm"
+                           class="w-50"
+                           :prepend="name.slice(0, 4)">
               <b-button :name="name"
                         v-model="names[name]"
                         class="flex-fill"
                         size="sm"
                         variant="default"
                         draggable
+                        @dblclick="names[name] = ''"
                         @click.prevent
                         @dragenter.prevent
                         @dragover.prevent
@@ -68,15 +71,28 @@
                         @drop="drop">
                 {{ names[name] }}
               </b-button>
-              <b-input-group-append>
-                <b-button title="Clear" variant="danger" @click="names[name] = ''">X</b-button>
-              </b-input-group-append>
             </b-input-group>
           </template>
+          <b-input-group size="sm"
+                         prepend="mark"
+                         class="w-50">
+            <b-form-select v-model="names['mark']"
+                           :options="['circle','line','bar','shape']"
+                           variant="default"
+                           size="sm"
+                           text="mark">
+            </b-form-select>
+          </b-input-group>
         </b-card>
-      </div>
 
-      <div class="col-xl-8 col-lg-6 col-md-6 col-sm-4 col-xs-12 column">
+        <b-card title="Raw data">
+          <b-button @click="loadPacketsRaw">
+            Get raw!
+          </b-button>
+        </b-card>
+      </b-col>
+
+      <b-col class="col-xl-8 col-lg-6 col-md-6 col-sm-4 col-xs-12">
         <moloch-loading
             :can-cancel="true"
             v-if="loading && !error"
@@ -97,13 +113,11 @@
         </moloch-no-results>
 
         <VegaLiteComponent
-            :mark="vegaMark"
             :types="fieldTypes"
             :fieldNames="names"
             :values="packets"/>
-      </div>
-      </div>
-    </div>
+      </b-col>
+      </b-row>
   </div>
 
 </template>
@@ -120,6 +134,7 @@ import MolochLoading from '../utils/Loading';
 import MolochNoResults from '../utils/NoResults';
 import FieldService from '../search/FieldService';
 import VegaLiteComponent from '../visualizations/VegaLiteComponent';
+import SpivisService from './SpivisService';
 
 let refreshInterval;
 let respondedAt; // the time that the last data load succesfully responded
@@ -152,13 +167,12 @@ export default {
       fields: [],
       fieldTypes: {},
       fieldTypeCount: {},
-      names: { x: '', y: '', row: '', column: '', size: '', color: '' },
+      names: { x: '', y: '', row: '', column: '', size: '', color: '', shape: '', mark: 'circle' },
       loading: true,
       filtered: 0,
       refresh: 0,
       recordsTotal: 0,
-      recordsFiltered: 0,
-      vegaMark: {}
+      recordsFiltered: 0
     };
   },
   computed: {
@@ -349,6 +363,25 @@ export default {
         .catch((error) => {
           this.error = error;
         });
+    },
+    loadPacketsRaw: function () {
+      if (this.packetFields?.node) {
+        const nodeSessionid = {};
+        if (this.packetFields.node.length > 1) {
+          for (const p of this.packets) {
+            if (!nodeSessionid[p.node]) { nodeSessionid[p.node] = []; }
+            nodeSessionid[p.node].push(p.id);
+          }
+        } else {
+          nodeSessionid[this.packets[0].node] = this.packets.map((p) => p.id);
+        }
+        for (const [node, sessionids] of Object.entries(nodeSessionid)) {
+          const source = Vue.axios.CancelToken.source();
+          SpivisService.getRaw(node, sessionids, source.token).then((resp) => {
+            console.log(resp.data);
+          }, (err) => console.log(err));
+        }
+      }
     }
   },
   beforeDestroy: function () {
@@ -362,34 +395,13 @@ export default {
 
 <style scoped>
 
-.spigraph-page form.spigraph-form {
-  z-index: 4;
-  background-color: var(--color-quaternary-lightest);
-}
-.spigraph-page form.spigraph-form .form-inline {
-  flex-flow: row nowrap;
-}
-.spigraph-page form.spigraph-form select.form-control {
-  -webkit-appearance: none;
-}
-.spigraph-page form.spigraph-form .form-inline .records-display  {
-  line-height: 0.95;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-/* field typeahead */
-.spigraph-page form.spigraph-form .field-typeahead {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-/* spigraph content styles ------------------- */
-.spigraph-page .spigraph-content {
+/* spivis content styles ------------------- */
+.spivis-page .spivis-content {
+  margin: 0px;
   padding-top: 10px;
 }
 
-.spigraph-page .spi-graph-item .spi-bucket sup {
+.spivis-page .spi-graph-item .spi-bucket sup {
   margin-left: -12px;
 }
 
@@ -397,24 +409,24 @@ export default {
 /* main graph/map */
 .field {
   font-size: 75%;
-  margin: 6px 6px 0 0;
+  margin: 5px 5px 0 0;
   padding: 1px 2px;
 }
 
-.mybadge {
+/* modify local scoped bootstrap stuff */
+.col {  padding: 2px; }
+.card { padding: 0.5rem;}
+.card-body {padding: 0; }
+.card-title {width: 100%;}
+
+.badge {
   top: unset;
   position: absolute;
   transform: translate(-50%, -75%);
   font-size: 80%;
   padding: 0.2em 0.2em 0 0.2em;
+  background-color: var(--color-background);
+  border: 1px dotted var(--color-foreground-accent);
 }
-
-.column {
-  padding-left: 3px;
-  padding-right: 3px;
-}
-
-.row {margin: 0;}
-smallcard { padding: 1rem 0.75rem;}
 
 </style>

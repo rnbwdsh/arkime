@@ -1920,6 +1920,12 @@ app.get( // remote hunt endpoint
   huntAPIs.remoteHunt
 );
 
+app.post( // session raw packets endpoint
+  ['/api/session/raw/:nodeName', '/:nodeName/raw'],
+  [checkProxyRequest, checkPermissions(['disablePcapDownload'])],
+  sessionAPIs.getRawPacketsMulti
+);
+
 // shortcut apis ----------------------------------------------------------------
 app.get( // get shortcuts endpoint
   ['/api/shortcuts', '/lookups'],

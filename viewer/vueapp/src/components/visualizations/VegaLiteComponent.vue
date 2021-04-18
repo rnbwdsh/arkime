@@ -40,10 +40,8 @@ export default {
         ));
     },
     config: function () {
-      const style = getComputedStyle(document.body);
-      const bgc = style.getPropertyValue('--color-background');
-      const fgc = style.getPropertyValue('--color-foreground');
-      const prc = style.getPropertyValue('--color-primary');
+      const [bgc, fgc, prc] = ['background', 'foreground', 'primary']
+        .map(cname => getComputedStyle(document.body).getPropertyValue('--color-' + cname));
       return {
         resize: true,
         autosize: {
@@ -89,7 +87,10 @@ export default {
   watch: {
     values: function () { this.embed(); },
     fieldNames: {
-      handler: function () { this.embed(); },
+      handler: function () {
+        this.mark = this.fieldNames.mark;
+        this.embed();
+      },
       deep: true
     }
   }

@@ -1615,6 +1615,8 @@ module.exports = (Config, Db, internals, molochparser, Pcap, version, ViewerUtil
             query._source.push(item);
           }
         });
+      } else if (req.query.excludeFields) {
+        query._source = { exclude: ViewerUtils.queryValueToArray(req.query.excludeFields) };
       } else {
         addMissing = true;
         query._source = [
@@ -2531,6 +2533,32 @@ module.exports = (Config, Db, internals, molochparser, Pcap, version, ViewerUtil
     }, () => {
       return sModule.proxyRequest(req, res);
     });
+  };
+
+  /**
+   * POST - /api/session/raw/:nodeName
+   *
+   * Retrieve multiple raw packets for multiple sessions
+   * @name /session/raw/:nodeName
+   * @returns {{id: [packet]}} A dict of session -> assembled-packets. Even packets are requests, odd packets are responses
+   */
+  sModule.getRawPacketsMulti = (req, res) => {
+    ViewerUtils.noCache(req, res, 'application/json');
+    const resultEntries = [];
+    for (const sessionId of req.body.ids) {
+      sModule.processSessionIdAndDecode(sessionId, 10000, (err, session, results) => {
+        if (err) {
+          return res.send(`Error at id ${sessionId}, ${err}`);
+        }
+        // other option: new Buffer(r.data).toString('base64')
+        resultEntries.push([sessionId, results.map((r) => new Buffer(r.data).toString('utf-8'))]);
+        // resultEntries.push([sessionId, results.map((r) => [...r.data])]);
+        // if all are done, return JSON object
+        if (resultEntries.length === req.body.ids.length) {
+          res.send(Object.fromEntries(resultEntries));
+        }
+      });
+    }
   };
 
   /**
