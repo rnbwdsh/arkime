@@ -13,7 +13,7 @@ export default {
 
   /**
    * Gets a field map from the server
-   * @param {bool} array        Whether to request an array or map
+   * @param {boolean} array        Whether to request an array or map
    * @returns {Promise} Promise A promise object that signals the completion
    *                            or rejection of the request.
    */

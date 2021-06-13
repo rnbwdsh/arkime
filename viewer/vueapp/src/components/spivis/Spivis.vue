@@ -1,5 +1,4 @@
 <template>
-
   <div class="spivis-page">
     <b-collapse :visible="true">
         <moloch-search
@@ -7,12 +6,14 @@
           @changeSearch="cancelAndLoad(true)">
           <!-- number of packets selector -->
         <div class="form-group ml-1">
-          <b-input-group size="sm" prepend="#packets" :append="'/ ' + recordsFiltered">
-            <b-select
-                @change="cancelAndLoad(true)"
+          <b-input-group :append="'of ' + recordsFiltered" prepend="#packets" size="sm">
+            <b-select :value="$route.query.length"
                 class="form-control"
-                style="-webkit-appearance: none; -moz-appearance: none;"
-                :value="$route.query.length" :options="[10, 100, 1000, 10000]"/>
+                @change="cancelAndLoad(true)">
+              <b-select-option v-for="num of [10, 100, 1024, 10240, 102400]" :key="num" :value="num">
+                {{num | humanReadableBits }}
+              </b-select-option>
+            </b-select>
           </b-input-group>
         </div>
         </moloch-search> <!-- /search navbar -->
@@ -22,26 +23,17 @@
       <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6">
       <b-card title="Features">
         <template v-for="currentField of FIELD">
-          <b-card-text :key="currentField.id" v-if="fieldTypeCount[currentField.id]">
-            <strong v-b-toggle="'coll-' + currentField.id" size="sm" variant="secondary">
+          <b-card-text v-if="fieldTypeCount[currentField.id]" :key="currentField.id">
+            <strong v-b-toggle="'coll-' + currentField.id" size="sm">
               <span :class="['fa', currentField.icon]"/> {{currentField.name}}
             </strong>
-            <b-collapse :id="'coll-' + currentField.id"
-                        :visible="currentField.id !== FIELD.single.id">
-              <template v-for="(ele, name) in packetFields">
-                  <b-button v-if="fieldTypes[name] === currentField.id"
-                            :key="name"
-                            :name="name"
-                            variant="default"
-                            draggable
-                            class="field"
-                            @click.prevent
-                            @mouseover="setTooltip"
-                            @dragstart="dragstartOriginal">
-                    {{name}}
-                    <b-badge variant="default">
-                      {{ ele.length }}
-                    </b-badge>
+            <b-collapse :id="'coll-' + currentField.id" :visible="!currentField.hide">
+              <template v-for="fieldName in fieldNamesByCategory[currentField.id]">
+                <b-button :key="fieldName" :name="fieldName"
+                            class="field-button" draggable="true" variant="default"
+                            @dragstart="dragstartOriginal" @mouseover="setTooltip" @click.prevent="true">
+                    {{fieldName | rawIcon }}
+                    <b-badge variant="default" > {{ packetFields[fieldName].length }} </b-badge>
                   </b-button>
               </template>
             </b-collapse>
@@ -49,73 +41,56 @@
         </template>
       </b-card>
       </b-col>
+
       <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6" >
-        <b-card title="Visualization" body-class="flex-wrap d-flex">
-          <template v-for="name of Object.keys(names)">
-            <b-input-group v-if="name !== 'mark'"
-                           :key="name"
-                           size="sm"
-                           class="w-50"
-                           :prepend="name.slice(0, 4)">
-              <b-button :name="name"
-                        v-model="names[name]"
-                        class="flex-fill"
-                        size="sm"
-                        variant="default"
-                        draggable
-                        @dblclick="names[name] = ''"
-                        @click.prevent
-                        @dragenter.prevent
-                        @dragover.prevent
-                        @dragstart="dragstartField"
-                        @drop="drop">
-                {{ names[name] }}
+        <b-card>
+          <b-card-title> Feature extraction </b-card-title>
+          <b-form-tags v-model="statFields"
+                       :tag-validator="fieldValidator"
+                       placeholder="Enter valid Text [Array]"/>
+          <b-button @click="recomputeFields">Calculate</b-button>
+
+          <div>
+              <b-table :items="statistics" :responsive="true" small
+                       thead-class="statTable" tbody-class="statTable">
+                <!-- row label bold, rest to short numbers with K/M postfix -->
+                <template #cell()="data"> {{ data.value | humanReadableBits }} </template>
+              </b-table>
+            </div>
+        </b-card>
+
+        <b-card body-class="flex-wrap d-flex" title="Visualization">
+          <template v-for="vegaField of Object.keys(names)">
+            <b-input-group v-if="vegaField !== 'mark'" :key="vegaField" :prepend="vegaField.slice(0, 4)"
+                           class="w-50 flex-nowrap" size="sm">
+              <b-button v-model="names[vegaField]" :name="vegaField"
+                        class="flex-fill" draggable="true" size="sm" variant="default"
+                        @dblclick="names[vegaField] = ''" @dragstart="dragstartField" @drop="drop"
+                        @click.prevent @dragenter.prevent @dragover.prevent>
+                {{ names[vegaField] }}
               </b-button>
             </b-input-group>
           </template>
-          <b-input-group size="sm"
-                         prepend="mark"
-                         class="w-50">
-            <b-form-select v-model="names['mark']"
-                           :options="['circle','line','bar','shape']"
-                           variant="default"
-                           size="sm"
-                           text="mark">
+          <b-input-group class="w-50" prepend="mark" size="sm">
+            <b-form-select v-model="names['mark']" :options="['circle','line','bar','shape']"
+                           size="sm" text="mark" variant="default">
             </b-form-select>
           </b-input-group>
-        </b-card>
-
-        <b-card title="Raw data">
-          <b-button @click="loadPacketsRaw">
-            Get raw!
-          </b-button>
         </b-card>
       </b-col>
 
       <b-col class="col-xl-8 col-lg-6 col-md-6 col-sm-4 col-xs-12">
-        <moloch-loading
-            :can-cancel="true"
-            v-if="loading && !error"
-            @cancel="cancelAndLoad">
-        </moloch-loading>
+        <moloch-loading v-if="loading && !error" :can-cancel="true"
+            @cancel="cancelAndLoad"/>
 
-        <moloch-error
-            v-if="error"
-            :message="error"
-            class="mt-5 mb-5">
-        </moloch-error>
+        <moloch-error v-if="error" :message="error"
+            class="mt-5 mb-5"/>
 
-        <moloch-no-results
-            v-if="!error && !loading && !packets.length"
-            class="mt-5 mb-5"
-            :records-total="recordsTotal"
-            :view="query.view">
-        </moloch-no-results>
+        <moloch-no-results v-if="!error && !loading && !packets.length"
+            :records-total="recordsTotal" :view="query.view"
+            class="mt-5 mb-5"/>
 
-        <VegaLiteComponent
-            :types="fieldTypes"
-            :fieldNames="names"
-            :values="packets"/>
+        <VegaLiteComponent :fieldNames="names" :types="fieldTypes" :values="packets"/>
       </b-col>
       </b-row>
   </div>
@@ -137,18 +112,8 @@ import VegaLiteComponent from '../visualizations/VegaLiteComponent';
 import SpivisService from './SpivisService';
 
 let refreshInterval;
-let respondedAt; // the time that the last data load succesfully responded
+let respondedAt; // the time that the last data load successfully responded
 let pendingPromise; // save a pending promise to be able to cancel it
-
-const FIELD = {
-  number: { id: 0, icon: 'fa-hashtag', name: 'Number' },
-  string: { id: 1, icon: 'fa-text-width', name: 'Text' },
-  numberarray: { id: 2, icon: 'fa-list-ol', name: 'Number Array' },
-  stringarray: { id: 3, icon: 'fa-list', name: 'Text Array' },
-  object: { id: 4, icon: 'fa-list', name: 'Array' },
-  single: { id: 5, icon: 'fa-check', name: 'Single' },
-  other: { id: 6, icon: 'fa-bar-chart', name: 'Other' }
-};
 
 export default {
   name: 'Spivis',
@@ -161,10 +126,12 @@ export default {
   },
   data: function () {
     return {
+      FIELD: [], // just to prevent linter errors
       error: '',
       packets: [],
       packetFields: [],
       fields: [],
+      rawDataFetched: false,
       fieldTypes: {},
       fieldTypeCount: {},
       names: { x: '', y: '', row: '', column: '', size: '', color: '', shape: '', mark: 'circle' },
@@ -172,7 +139,9 @@ export default {
       filtered: 0,
       refresh: 0,
       recordsTotal: 0,
-      recordsFiltered: 0
+      recordsFiltered: 0,
+      statistics: [],
+      statFields: [SpivisService.RALL, SpivisService.RSRC, SpivisService.RDST]
     };
   },
   computed: {
@@ -195,11 +164,19 @@ export default {
           }
         });
       }
+    },
+    fieldNamesByCategory: function () {
+      const fnc = {};
+      for (const [nam, id] of Object.entries(this.fieldTypes)) {
+        if (!fnc[id]) { fnc[id] = []; }
+        fnc[id].push(nam);
+      }
+      return fnc;
     }
   },
   watch: { },
   created: function () {
-    this.FIELD = FIELD; // add fields non-reactive
+    this.FIELD = SpivisService.FIELD; // add fields non-reactive
     this.query.length = 100;
     FieldService.get(true)
       .then((result) => {
@@ -227,13 +204,13 @@ export default {
     /**
      * Cancels the pending session query (if it's still pending) and runs a new
      * query if requested
-     * @param {bool} runNewQuery  Whether to run a new spigraph query after
+     * @param {boolean} runNewQuery  Whether to run a new spigraph query after
      *                            canceling the request
      */
     cancelAndLoad: function (runNewQuery) {
       if (pendingPromise) {
         ConfigService.cancelEsTask(pendingPromise.cancelId)
-          .then((response) => {
+          .then((_) => {
             if (pendingPromise) {
               pendingPromise.source.cancel();
               pendingPromise = null;
@@ -260,7 +237,7 @@ export default {
       if (this.refresh && this.refresh > 0) {
         this.$store.commit('setIssueSearch', true);
         refreshInterval = setInterval(() => {
-          if (respondedAt && Date.now() - respondedAt >= parseInt(this.refresh * 1000)) {
+          if (respondedAt && Date.now() - respondedAt >= parseInt(this.refresh) * 1000) {
             this.$store.commit('setIssueSearch', true);
           }
         }, 500);
@@ -287,56 +264,24 @@ export default {
       let data = this.packetFields[e.target.name];
       if (!data) return;
       data = data.slice(0, 30).join(', ');
+      if (e.target.name.includes(SpivisService.RANY)) {
+        data = e.target.name + ': ' + data;
+      }
       e.target.title = data.length > 100 ? data.slice(0, 100) + '...' : data;
     },
-    /* helper functions ---------------------------------------------------- */
-    extractFields: function (items) {
-      const fields = {};
-      for (const item of items) {
-        for (const [key, value] of Object.entries(item)) {
-          if (!fields[key]) { fields[key] = {}; }
-          // this trick "hashes" the value, so we get a Map(hash, value)
-          // it's actually faster to overwrite than to check if it's set
-          fields[key][value] = value;
-        }
-      }
-      return Object.fromEntries(Object.entries(fields)
-        .map(([k, v]) => [k, Object.values(v)]) // get values from our "hashmap"
-        .sort((a, b) => b[1].length - a[1].length)); // sort entries by length
+    fieldValidator: function (tag) {
+      return [SpivisService.FIELD.string.id, SpivisService.FIELD.stringarray.id].includes(this.fieldTypes[tag]);
     },
-    extractFieldTypes: (fields) =>
-      Object.fromEntries(
-        Object.entries(fields).map(([key, values]) => {
-          if (values.length <= 1) {
-            return [key, FIELD.single.id];
-          } else if (values.every((v) => typeof values[0] === typeof v)) {
-            return [key, FIELD[typeof values[0]].id];
-          } else {
-            return [key, FIELD.other.id];
-          }
-        })),
-    fixFields: function (itemFields, fieldTypes) {
-      const fieldCount = {};
-      for (let [title, type] of Object.entries(fieldTypes)) {
-        if (type === FIELD.object.id) {
-          if (itemFields[title].every((v) => v.length === 1)) {
-            fieldTypes[title] = FIELD[typeof itemFields[title][0][0]].id;
-            itemFields[title] = itemFields[title].map((v) => v[0]).sort();
-            for (const item of this.packets) {
-              if (item[title]) {
-                item[title] = item[title].map((v) => v[0]);
-              }
-            }
-          } else {
-            const typeName = (typeof itemFields[title][0][0]) + 'array';
-            fieldTypes[title] = FIELD[typeName].id;
-          }
-        }
-        type = fieldTypes[title];
-        if (!fieldCount[type]) { fieldCount[type] = 0; }
-        fieldCount[type]++;
-      }
-      this.fieldTypeCount = fieldCount;
+    /* data loader helper functions -------------------------------------------- */
+    recomputeFields: function () {
+      SpivisService.deleteStats(this.packets, this.packetFields, this.fieldTypes);
+      this.loading = true;
+      this.statistics = SpivisService.calculateStatistics(this.packets, this.statFields);
+      this.packetFields = SpivisService.extractFields(this.packets);
+      this.fieldTypes = SpivisService.extractFieldTypes(this.packetFields);
+      this.fieldTypeCount = SpivisService.fixFields(this.packetFields, this.fieldTypes, this.packets);
+      this.error = '';
+      this.loading = false;
     },
     loadPackets: function () {
       respondedAt = undefined;
@@ -348,40 +293,22 @@ export default {
           ...this.query,
           facets: false,
           flatten: 1,
-          excludeFields: 'srcOui,dstOui,fileId,packetPos'
+          excludeFields: 'srcOui,dstOui,fileId,packetPos,fileId'
         }
       }).then((response) => {
         this.recordsFiltered = response.data.recordsFiltered;
         this.packets = response.data.data;
-        this.packetFields = this.extractFields(this.packets);
-        const fieldTypes = this.extractFieldTypes(this.packetFields);
-        this.fixFields(this.packetFields, fieldTypes);
-        this.fieldTypes = fieldTypes;
-        this.error = '';
-        this.loading = false;
+        this.packetFields = SpivisService.extractFields(this.packets);
+        SpivisService.loadPacketsRaw(this.packets, this.packetFields, this.recomputeFields);
       })
         .catch((error) => {
           this.error = error;
         });
-    },
-    loadPacketsRaw: function () {
-      if (this.packetFields?.node) {
-        const nodeSessionid = {};
-        if (this.packetFields.node.length > 1) {
-          for (const p of this.packets) {
-            if (!nodeSessionid[p.node]) { nodeSessionid[p.node] = []; }
-            nodeSessionid[p.node].push(p.id);
-          }
-        } else {
-          nodeSessionid[this.packets[0].node] = this.packets.map((p) => p.id);
-        }
-        for (const [node, sessionids] of Object.entries(nodeSessionid)) {
-          const source = Vue.axios.CancelToken.source();
-          SpivisService.getRaw(node, sessionids, source.token).then((resp) => {
-            console.log(resp.data);
-          }, (err) => console.log(err));
-        }
-      }
+    }
+  },
+  filters: {
+    rawIcon: function (label) {
+      return label.replace(SpivisService.CTR, 'ℕ').replace(SpivisService.STATS, '#');
     }
   },
   beforeDestroy: function () {
@@ -394,20 +321,15 @@ export default {
 </script>
 
 <style scoped>
-
 /* spivis content styles ------------------- */
 .spivis-page .spivis-content {
-  margin: 0px;
+  margin: 0;
   padding-top: 10px;
-}
-
-.spivis-page .spi-graph-item .spi-bucket sup {
-  margin-left: -12px;
 }
 
 /* spigraph content styles ------------------- */
 /* main graph/map */
-.field {
+.field-button {
   font-size: 75%;
   margin: 5px 5px 0 0;
   padding: 1px 2px;
@@ -426,7 +348,22 @@ export default {
   font-size: 80%;
   padding: 0.2em 0.2em 0 0.2em;
   background-color: var(--color-background);
-  border: 1px dotted var(--color-foreground-accent);
+  border: 1px solid #ced4da;
 }
+.custom-select {
+  border: 1px solid #ced4da;
+}
+</style>
 
+<style>
+  .statTable > tr > th {
+    overflow-wrap: anywhere;
+    padding: 1px !important;
+    font-size: 70%;
+    text-align: center;
+  }
+  .statTable > tr > td {
+    padding: 2px !important;
+    text-align: right;
+  }
 </style>
