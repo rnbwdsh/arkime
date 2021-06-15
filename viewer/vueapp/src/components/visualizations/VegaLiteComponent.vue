@@ -9,13 +9,19 @@
 import 'vega';
 import 'vega-lite';
 import embed from 'vega-embed';
+import SpivisService from '../spivis/SpivisService';
+
+const TEMPORAL_FIELDS = ['firstPacket', 'lastPacket', 'timestamp'];
 
 export default {
   name: 'VegaLiteComponent',
   components: {},
   props: {
     values: Array,
-    fieldTypes: Object,
+    fieldTypes: {
+      type: Object,
+      default: () => { }
+    },
     fieldNames: {
       type: Object,
       default: () => { }
@@ -30,11 +36,11 @@ export default {
   computed: {
     encoding: function () {
       return Object.fromEntries(Object.entries(this.fieldNames)
-        .filter(([_, propName]) => propName)
-        .map(([axisName, propName]) =>
+        .filter(([propName, propValue]) => propValue && propName !== 'mark') // filter not null propname
+        .map(([axisName, propValue]) =>
           [axisName, {
-            field: propName,
-            type: this.datatypeOf(propName),
+            field: propValue,
+            type: this.datatypeOf(propValue),
             scale: { zero: false }
           }]
         ));
@@ -71,17 +77,10 @@ export default {
       return embed('#vis', this);
     },
     datatypeOf: function (propName) {
-      let type = 'ordinal';
-      if (this.values && this.values[0] && this.values[0][propName]) {
-        const v0 = this.values[0][propName];
-        if (typeof v0 === 'number') {
-          type = 'quantitative';
-          if (v0 > 1000000000000 && v0 < 2000000000000) {
-            type = 'temporal';
-          }
-        }
-      }
-      return type;
+      return TEMPORAL_FIELDS.includes(propName)
+        ? 'temporal'
+        : Object.values(SpivisService.FIELD)
+          .filter((ft) => ft.id === this.fieldTypes[propName])[0].vegaType;
     }
   },
   watch: {
@@ -92,7 +91,8 @@ export default {
         this.embed();
       },
       deep: true
-    }
+    },
+    fieldTypes: function () { this.embed(); }
   }
 };
 </script>

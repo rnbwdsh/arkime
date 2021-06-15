@@ -1,7 +1,7 @@
 import Vue from 'vue';
 
-const LOOKUP_TABLE = { // only used to generate LOOKUP
-  C: 'ctrl',
+const LOOKUP_TABLE = { // used to generate LOOKUP + table headers for statistics
+  C: 'control',
   W: 'white',
   S: 'special',
   N: 'number',
@@ -22,8 +22,8 @@ const CHAR_CLASSES =
 const LOOKUP = [...CHAR_CLASSES].map((pos) => LOOKUP_TABLE[pos]);
 
 export default {
-  CTR: 'ctr.',
-  STATS: 'stat.',
+  CTR: 'ctr_',
+  STATS: 'stat_',
   RANY: 'raw', // common starting text
   RALL: 'rawAll',
   RSRC: 'rawSrc',
@@ -31,16 +31,17 @@ export default {
   FEATURE: 'feature',
 
   FIELD: {
-    number: { id: 0, icon: 'fa-hashtag', name: 'Number' },
-    string: { id: 1, icon: 'fa-text-width', name: 'Text' },
-    numberarray: { id: 2, icon: 'fa-list-ol', name: 'Number Array' },
-    stringarray: { id: 3, icon: 'fa-list', name: 'Text Array' },
-    object: { id: 4, icon: 'fa-list', name: 'Array' },
-    statfeature: { id: 5, icon: 'fa-calculator', name: 'Statistics' },
-    ctrfeature: { id: 6, icon: 'fa-asterisk', name: 'Counter', hide: true },
-    single: { id: 7, icon: 'fa-check', name: 'Single', hide: true },
-    other: { id: 8, icon: 'fa-bar-chart', name: 'Other' }
+    number: { id: 0, icon: 'fa-hashtag', name: 'Number', vegaType: 'quantitative' }, // can be temporal
+    string: { id: 1, icon: 'fa-text-width', name: 'Text', vegaType: 'nominal' },
+    numberarray: { id: 2, icon: 'fa-list-ol', name: 'Number Array', vegaType: 'ordinal' },
+    stringarray: { id: 3, icon: 'fa-list', name: 'Text Array', vegaType: 'ordinal' },
+    object: { id: 4, icon: 'fa-list', name: 'Array', vegaType: 'ordinal' },
+    statfeature: { id: 5, icon: 'fa-calculator', name: 'Statistics', vegaType: 'quantitative' },
+    ctrfeature: { id: 6, icon: 'fa-asterisk', name: 'Counter', hide: true, vegaType: 'quantitative' },
+    single: { id: 7, icon: 'fa-check', name: 'Single', hide: true, vegaType: 'nominal' },
+    other: { id: 8, icon: 'fa-bar-chart', name: 'Other', vegaType: 'nominal' }
   },
+  LOOKUP_TABLE,
   /* service methods ------------------------------------------------------- */
   /**
    * Gets raw packet data from the server
@@ -91,7 +92,7 @@ export default {
       if (values.length <= 1) {
         return [key, this.FIELD.single.id]; // special type: single
       } else if (key.startsWith(this.CTR) || key.startsWith(this.STATS)) {
-        const typ = key.split('.')[0] + this.FEATURE;
+        const typ = key.split('_')[0] + this.FEATURE;
         return [key, this.FIELD[typ].id];
       } else if (values.every((v) => typeof values[0] === typeof v)) {
         return [key, this.FIELD[typeof values[0]].id];
@@ -157,7 +158,6 @@ export default {
         this.getRaw(node, sessionIds, source.token).then((response) => {
           this.assignPackets(packets, response.data);
           if (--tasksTodo === 0) { doneCb(); }
-          console.log('Tasks todo', tasksTodo);
         }, (err) => console.log(err));
       }
     }
@@ -199,14 +199,25 @@ export default {
         }
         // set ctr and stats per packet
         packetCtr.forEach((ctr, idx) => {
-          packet[this.CTR + field + '.' + idx.toString(16).padStart(2, '0')] = ctr;
+          packet[this.CTR + field + '_' + idx.toString(16).padStart(2, '0')] = ctr;
         });
         for (const [k, v] of Object.entries(this.ctrToStats(packetCtr))) {
-          packet[this.STATS + field + '.' + k] = v;
+          packet[this.STATS + field + '_' + k] = v;
         }
       }
     }
     // return overall statistics
     return Object.values(totalCtr).map(this.ctrToStats);
+  },
+  vegaDatatypeOf: function (propName, fieldTypes) {
+    const fieldType = Object.values(this.FIELD)
+      .filter((ft) => ft.id === fieldTypes[propName])[0];
+    if (this.values && this.values[0] && fieldType.vegaType === 'quantitative') {
+      const v0 = this.values[0][propName];
+      if (v0 > 1000000000000 && v0 < 2000000000000) {
+        return 'temporal';
+      }
+    }
+    return fieldType.vegaType;
   }
 };

@@ -31,7 +31,7 @@
               <template v-for="fieldName in fieldNamesByCategory[currentField.id]">
                 <b-button :key="fieldName" :name="fieldName"
                             class="field-button" draggable="true" variant="default"
-                            @dragstart="dragstartOriginal" @mouseover="setTooltip" @click.prevent="true">
+                            @dragstart="dragstartOriginal" @mouseover="setTooltip" @click.prevent>
                     {{fieldName | rawIcon }}
                     <b-badge variant="default" > {{ packetFields[fieldName].length }} </b-badge>
                   </b-button>
@@ -43,12 +43,17 @@
       </b-col>
 
       <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6" >
-        <b-card>
-          <b-card-title> Feature extraction </b-card-title>
-          <b-form-tags v-model="statFields"
-                       :tag-validator="fieldValidator"
-                       placeholder="Enter valid Text [Array]"/>
-          <b-button @click="recomputeFields">Calculate</b-button>
+        <b-card title="Feature extraction">
+          <b-input-group>
+            <b-form-tags v-model="statFields"
+                         :tag-validator="stringFieldValidator"
+                         placeholder="Enter valid Text [Array]"/>
+            <b-input-group-append>
+            <b-button @click="recomputeFields" size="sm" class="text-large">
+              🖩
+            </b-button>
+            </b-input-group-append>
+          </b-input-group>
 
           <div>
               <b-table :items="statistics" :responsive="true" small
@@ -59,20 +64,53 @@
             </div>
         </b-card>
 
+        <b-card title="Dimensionality reduction">
+          <b-input-group prepend="Method">
+            <b-select v-model="vselect" :options="['PCA', 'TSNE']"/>
+          </b-input-group>
+
+          <b-input-group>
+            <b-form-tags v-model="dimFields"
+                         :tag-validator="stringFieldValidator"
+                         placeholder="Enter valid Number fields"/>
+              <b-input-group-append>
+                <b-button @click="recomputeFields" size="sm" class="text-large">
+                  🖩
+                </b-button>
+              </b-input-group-append>
+          </b-input-group>
+        </b-card>
+
+        <b-card title="Clustering & Outliers">
+          <b-input-group prepend="Method">
+            <b-select v-model="cselect" :options="['KNN']"/>
+          </b-input-group>
+          <b-input-group>
+            <b-form-tags v-model="dimFields"
+                         :tag-validator="stringFieldValidator"
+                         placeholder="Enter valid Number fields"/>
+            <b-input-group-append>
+              <b-button @click="recomputeFields" size="sm" class="text-large">
+                🖩
+              </b-button>
+            </b-input-group-append>
+          </b-input-group>
+        </b-card>
+
         <b-card body-class="flex-wrap d-flex" title="Visualization">
-          <template v-for="vegaField of Object.keys(names)">
+          <template v-for="vegaField of Object.keys(vegaNames)">
             <b-input-group v-if="vegaField !== 'mark'" :key="vegaField" :prepend="vegaField.slice(0, 4)"
                            class="w-50 flex-nowrap" size="sm">
-              <b-button v-model="names[vegaField]" :name="vegaField"
+              <b-button v-model="vegaNames[vegaField]" :name="vegaField"
                         class="flex-fill" draggable="true" size="sm" variant="default"
-                        @dblclick="names[vegaField] = ''" @dragstart="dragstartField" @drop="drop"
+                        @dblclick="vegaNames[vegaField] = ''" @dragstart="dragstartField" @drop="drop"
                         @click.prevent @dragenter.prevent @dragover.prevent>
-                {{ names[vegaField] }}
+                {{ vegaNames[vegaField] }}
               </b-button>
             </b-input-group>
           </template>
           <b-input-group class="w-50" prepend="mark" size="sm">
-            <b-form-select v-model="names['mark']" :options="['circle','line','bar','shape']"
+            <b-form-select v-model="vegaNames['mark']" :options="['circle','line','bar','shape']"
                            size="sm" text="mark" variant="default">
             </b-form-select>
           </b-input-group>
@@ -90,7 +128,7 @@
             :records-total="recordsTotal" :view="query.view"
             class="mt-5 mb-5"/>
 
-        <VegaLiteComponent :fieldNames="names" :types="fieldTypes" :values="packets"/>
+        <VegaLiteComponent :fieldNames="vegaNames" :fieldTypes="fieldTypes" :values="packets" />
       </b-col>
       </b-row>
   </div>
@@ -134,14 +172,17 @@ export default {
       rawDataFetched: false,
       fieldTypes: {},
       fieldTypeCount: {},
-      names: { x: '', y: '', row: '', column: '', size: '', color: '', shape: '', mark: 'circle' },
+      vegaNames: { x: '', y: '', row: '', column: '', size: '', color: '', shape: '', mark: 'circle' },
       loading: true,
       filtered: 0,
       refresh: 0,
       recordsTotal: 0,
       recordsFiltered: 0,
       statistics: [],
-      statFields: [SpivisService.RALL, SpivisService.RSRC, SpivisService.RDST]
+      statFields: [SpivisService.RALL, SpivisService.RSRC, SpivisService.RDST],
+      dimFields: [], // Object.values(SpivisService.LOOKUP).map((ln) => (SpivisService.RALL + '.' + ln)),
+      vselect: 'PCA',
+      cselect: 'KNN'
     };
   },
   computed: {
@@ -247,10 +288,10 @@ export default {
     drop: function (e) {
       // if we dragged it from a field, empty that field or swap it
       if (this.dragStart) {
-        this.names[this.dragStart] = this.names[e.target.name];
+        this.vegaNames[this.dragStart] = this.vegaNames[e.target.name];
       }
       // set name of new field
-      this.names[e.target.name] = this.dragged;
+      this.vegaNames[e.target.name] = this.dragged;
     },
     dragstartOriginal: function (e) {
       this.dragged = e.target.name;
@@ -269,7 +310,7 @@ export default {
       }
       e.target.title = data.length > 100 ? data.slice(0, 100) + '...' : data;
     },
-    fieldValidator: function (tag) {
+    stringFieldValidator: function (tag) {
       return [SpivisService.FIELD.string.id, SpivisService.FIELD.stringarray.id].includes(this.fieldTypes[tag]);
     },
     /* data loader helper functions -------------------------------------------- */
@@ -297,7 +338,10 @@ export default {
         }
       }).then((response) => {
         this.recordsFiltered = response.data.recordsFiltered;
-        this.packets = response.data.data;
+        // replace underscores with dots, for vega to work
+        this.packets = response.data.data.map((p) =>
+          Object.fromEntries(Object.entries(p).map(
+            ([k, v]) => [k.replaceAll('.', '_'), v])));
         this.packetFields = SpivisService.extractFields(this.packets);
         SpivisService.loadPacketsRaw(this.packets, this.packetFields, this.recomputeFields);
       })
@@ -308,7 +352,7 @@ export default {
   },
   filters: {
     rawIcon: function (label) {
-      return label.replace(SpivisService.CTR, 'ℕ').replace(SpivisService.STATS, '#');
+      return label.replace(SpivisService.CTR, 'ℕ').replace(SpivisService.STATS, '#').replaceAll('_', '.');
     }
   },
   beforeDestroy: function () {
@@ -335,6 +379,8 @@ export default {
   padding: 1px 2px;
 }
 
+.text-large { font-size: 120%; }
+
 /* modify local scoped bootstrap stuff */
 .col {  padding: 2px; }
 .card { padding: 0.5rem;}
@@ -354,7 +400,7 @@ export default {
   border: 1px solid #ced4da;
 }
 </style>
-
+<!-- tables are scoped, so scoped styles won't work on them -->
 <style>
   .statTable > tr > th {
     overflow-wrap: anywhere;
