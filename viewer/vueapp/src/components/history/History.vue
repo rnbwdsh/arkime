@@ -73,7 +73,7 @@
               :records-total="history.recordsTotal"
               :records-filtered="history.recordsFiltered"
               @changePaging="changePaging"
-              length-default=100>
+              :length-default=100>
             </moloch-paging>
             <moloch-toast
               class="ml-2 mb-3 mt-1"

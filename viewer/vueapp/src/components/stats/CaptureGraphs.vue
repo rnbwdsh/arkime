@@ -21,7 +21,7 @@
         :records-total="stats.recordsTotal"
         :records-filtered="stats.recordsFiltered"
         v-on:changePaging="changePaging"
-        length-default=200>
+        :length-default=200>
       </moloch-paging>
 
       <div id="statsGraph" style="width:1440px;"></div>

@@ -21,7 +21,7 @@
         :records-total="recordsTotal"
         :records-filtered="recordsFiltered"
         v-on:changePaging="changePaging"
-        length-default=200>
+        :length-default=200>
       </moloch-paging>
 
       <moloch-table

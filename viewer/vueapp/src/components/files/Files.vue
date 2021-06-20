@@ -39,7 +39,7 @@
               :records-total="recordsTotal"
               :records-filtered="recordsFiltered"
               v-on:changePaging="changePaging"
-              length-default=500 >
+              :length-default=500 >
             </moloch-paging>
           </div>
         </div>
