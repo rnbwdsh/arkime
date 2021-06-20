@@ -1,6 +1,10 @@
 /* Bootstrap Overrides (mainly for Arkime themes) */
 
 /* dark form controls ------------------------------------------------------ */
+.b-form-tags,
+.b-form-tags.focus,
+.b-form-tags-input,
+.b-form-tags-input.focus,
 input.form-control,
 input.form-control:focus,
 select.form-control,
@@ -24,7 +28,7 @@ textarea.form-control:focus {
   background-color: var(--color-gray-light);
 }
 .btn.btn-default:hover {
-  color: #333;
+  color: var(--color-foreground, #333);
   border-color: var(--color-gray);
   background-color: var(--color-gray);
 }
