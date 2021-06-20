@@ -1,16 +1,14 @@
 <template>
 
-  <div>
-    <div v-if="!infoOnly">
+  <b-input-group size="sm">
+    <b-input-group-prepend v-if="prepend">
+      <b-input-group-text>
+        {{ prepend }}
+      </b-input-group-text>
+    </b-input-group-prepend>
+    <template v-if="!infoOnly">
       <!-- page size -->
-      <select class="form-control page-select"
-        v-model="length">
-        <option v-for="option of lengthOptions"
-          :key="option.value"
-          :value="option.value">
-          {{ option.label }}
-        </option>
-      </select> <!-- /page size -->
+      <b-select class="page-select" size="sm" v-model="length" :options="lengthOptions"/>
       <!-- paging -->
       <b-pagination size="sm"
         v-model="currentPage"
@@ -23,7 +21,7 @@
       <!-- page info -->
       <div class="pagination-info cursor-help"
         v-b-tooltip.hover.right="pagingInfoTitle">
-        Showing
+        <span v-if="!compact">Showing</span>
         <span v-if="recordsFiltered">
           {{ start + 1 }}
         </span>
@@ -33,27 +31,30 @@
         <span v-if="recordsFiltered">
           - {{ Math.min((start + length), recordsFiltered) }}
         </span>
-        of {{ recordsFiltered | commaString }} entries
+        of {{ recordsFiltered | commaString }}
+        <span v-if="!compact">entries</span>
       </div> <!-- /page info -->
-    </div>
-    <div v-else
+    </template>
+    <template v-else
       class="pagination-info info-only">
       Showing {{ recordsFiltered | commaString }} entries,
       filtered from {{ recordsTotal }} total entries
-    </div>
-  </div>
+    </template>
+  </b-input-group>
 
 </template>
 
 <script>
 export default {
   name: 'MolochPaging',
-  props: [
-    'recordsTotal',
-    'recordsFiltered',
-    'lengthDefault',
-    'infoOnly'
-  ],
+  props: {
+    recordsTotal: Number,
+    recordsFiltered: Number,
+    lengthDefault: Number,
+    infoOnly: Boolean,
+    compact: Boolean,
+    prepend: String
+  },
   data: function () {
     return {
       start: 0,
@@ -87,14 +88,9 @@ export default {
       }
     },
     lengthOptions: function () {
-      const options = [
-        { value: 10, label: '10 per page' },
-        { value: 50, label: '50 per page' },
-        { value: 100, label: '100 per page' },
-        { value: 200, label: '200 per page' },
-        { value: 500, label: '500 per page' },
-        { value: 1000, label: '1000 per page' }
-      ];
+      const options = [10, 50, 100, 200, 500, 1000].map((nr) => {
+        return { value: nr, text: this.compact ? nr : `${nr} per page` };
+      });
 
       let exists = false;
       for (const option of options) {
@@ -139,25 +135,6 @@ export default {
 </script>
 
 <style scoped>
-.pagination {
-  display: inline-flex;
-}
-
-select.page-select {
-  width: 120px;
-  font-size: .8rem;
-  display: inline-flex;
-  height: 31px !important;
-  margin-top: 1px;
-  margin-right: -5px;
-  margin-bottom: var(--px-xs);
-  padding-top: var(--px-xs);
-  padding-bottom: var(--px-xs);
-  border-right: none;
-  border-radius: var(--px-sm) 0 0 var(--px-sm);
-  border-color: var(--color-gray-light);
-  -webkit-appearance: none;
-}
 
 .pagination-info {
   display: inline-block;
@@ -165,12 +142,15 @@ select.page-select {
   color: var(--color-gray-dark);
   border: 1px solid var(--color-gray-light);
   padding: 5px 10px;
-  margin-left: -6px;
   border-radius: 0 var(--px-sm) var(--px-sm) 0;
   background-color: var(--color-white);
 }
 
-.pagination-info.info-only {
-  border-radius: var(--px-sm);
+.page-select {
+  border-right: none;
+}
+
+.pagination {
+  margin-bottom: 0;
 }
 </style>
