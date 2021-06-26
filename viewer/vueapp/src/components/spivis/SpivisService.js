@@ -1,29 +1,7 @@
 import Vue from 'vue';
-
-const LOOKUP_TABLE = { // used to generate LOOKUP + table headers for statistics
-  C: 'control',
-  W: 'white',
-  S: 'special',
-  N: 'number',
-  U: 'upper',
-  L: 'lower',
-  E: 'eascii'
-};
-const CHAR_CLASSES =
-  'CCCCCCCCCCWCCWCCCCCCCCCCCCCCCCCC' +
-  'WSSSSSSSSSSSSSSSNNNNNNNNNNSSSSSS' +
-  'SUUUUUUUUUUUUUUUUUUUUUUUUUUSSSSS' +
-  'SLLLLLLLLLLLLLLLLLLLLLLLLLLSSSSC' +
-  'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE' +
-  'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE' +
-  'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE' +
-  'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE';
-
-const LOOKUP = [...CHAR_CLASSES].map((pos) => LOOKUP_TABLE[pos]);
+import FeatureExtractionService from './FeatureExtractionService';
 
 export default {
-  CTR: 'ctr_',
-  STATS: 'stat_',
   RANY: 'raw', // common starting text
   RALL: 'rawAll',
   RSRC: 'rawSrc',
@@ -41,7 +19,6 @@ export default {
     single: { id: 7, icon: 'fa-check', name: 'Single', hide: true, vegaType: 'nominal' },
     other: { id: 8, icon: 'fa-bar-chart', name: 'Other', vegaType: 'nominal' }
   },
-  LOOKUP_TABLE,
   /* service methods ------------------------------------------------------- */
   /**
    * Gets raw packet data from the server
@@ -91,8 +68,8 @@ export default {
     const entries = Object.entries(packetFields).map(([key, values]) => {
       if (values.length <= 1) {
         return [key, this.FIELD.single.id]; // special type: single
-      } else if (key.startsWith(this.CTR) || key.startsWith(this.STATS)) {
-        const typ = key.split('_')[0] + this.FEATURE;
+      } else if (key.startsWith(FeatureExtractionService.CTR) || key.startsWith(FeatureExtractionService.STATS)) {
+        const typ = key.split(FeatureExtractionService.SEP)[0] + this.FEATURE;
         return [key, this.FIELD[typ].id];
       } else if (values.every((v) => typeof values[0] === typeof v)) {
         return [key, this.FIELD[typeof values[0]].id];
@@ -136,78 +113,35 @@ export default {
     }
     return fieldCount;
   },
-  loadPacketsRaw: function (packets, packetFields, doneCb) {
-    if (packetFields?.node) {
-      const nodeSessionId = {};
-      if (packetFields.node.length > 1) {
-        for (const p of this.packets) {
-          if (p.totDataBytes && p[this.RALL]) {
-            if (!nodeSessionId[p.node]) { // create container for node if it doesn't exist
-              nodeSessionId[p.node] = [];
-            }
-            nodeSessionId[p.node].push(p.id);
-          }
-        }
-      } else {
-        nodeSessionId[packets[0].node] = packets.map((p) => p.id);
-      }
-      const nodeSessionTuples = Object.entries(nodeSessionId);
-      let tasksTodo = nodeSessionTuples.length;
-      for (const [node, sessionIds] of nodeSessionTuples) {
-        const source = Vue.axios.CancelToken.source();
-        this.getRaw(node, sessionIds, source.token).then((response) => {
-          this.assignPackets(packets, response.data);
-          if (--tasksTodo === 0) { doneCb(); }
-        }, (err) => console.log(err));
-      }
-    }
+  loadPacketsRaw: async function (packetsMeta) {
+    const packetsRaw = new Array(packetsMeta.length); // result array
+    const nodeSessionId = {};
+    packetsMeta.filter((p) => p.totDataBytes).forEach((p) => {
+      nodeSessionId[p.node] = (nodeSessionId[p.node] || []).concat([p.id]);
+    });
+    const nodeSessionTuples = Object.entries(nodeSessionId);
+    const promises = nodeSessionTuples.map(([node, sessionIds]) =>
+      this.getRaw(node, sessionIds, Vue.axios.CancelToken.source().token));
+    await Promise.all(promises).then((response) => {
+      const rd = Object.assign(...response.map((r) => r.data));
+      this.assignPackets(packetsMeta, rd, packetsRaw);
+    }, (err) => console.log(err));
+    return packetsRaw;
   },
-  assignPackets: function (packets, respPackets) {
-    for (const packet of packets) {
-      packets = respPackets[packet.id];
-      packet[this.RALL] = '';
-      packet[this.RSRC] = '';
-      packet[this.RDST] = '';
-      for (let i = 0; i < packets.length; i++) {
+  assignPackets: function (packets, respPackets, packetsRaw) {
+    for (const [idx, packet] of packets.entries()) {
+      const respSession = respPackets[packet.id];
+      const p = Object.fromEntries([[this.RALL, ''], [this.RSRC, ''], [this.RDST, '']]);
+      for (let i = 0; i < respSession?.length; i++) {
         if (i % 2) {
-          packet[this.RSRC] += packets[i];
+          p[this.RSRC] += respSession[i];
         } else {
-          packet[this.RDST] += packets[i];
+          p[this.RDST] += respSession[i];
         }
-        packet[this.RALL] += packets[i];
+        p[this.RALL] += respSession[i];
       }
+      packetsRaw[idx] = p;
     }
-  },
-  ctrToStats: function (counter) {
-    // create dict with same keys as lookup
-    const stats = Object.fromEntries(Object.values(LOOKUP_TABLE).map((v) => [v, 0]));
-    for (let i = 0; i < 256; i++) {
-      stats[LOOKUP[i]] += counter[i];
-    }
-    return stats;
-  },
-  calculateStatistics: function (packets, fields) {
-    const te = new TextEncoder();
-    const totalCtr = {};
-    for (const field of fields) {
-      totalCtr[field] = new Array(256).fill(0);
-      for (const packet of packets) {
-        const packetCtr = new Array(256).fill(0);
-        for (const char8 of te.encode(packet[field])) {
-          totalCtr[field][char8]++;
-          packetCtr[char8]++;
-        }
-        // set ctr and stats per packet
-        packetCtr.forEach((ctr, idx) => {
-          packet[this.CTR + field + '_' + idx.toString(16).padStart(2, '0')] = ctr;
-        });
-        for (const [k, v] of Object.entries(this.ctrToStats(packetCtr))) {
-          packet[this.STATS + field + '_' + k] = v;
-        }
-      }
-    }
-    // return overall statistics
-    return Object.values(totalCtr).map(this.ctrToStats);
   },
   vegaDatatypeOf: function (propName, fieldTypes) {
     const fieldType = Object.values(this.FIELD)
