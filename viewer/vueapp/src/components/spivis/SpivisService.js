@@ -1,7 +1,7 @@
 import Vue from 'vue';
-import FeatureExtractionService from './FeatureExtractionService';
 
 export default {
+  SEP: '_',
   RANY: 'raw', // common starting text
   RALL: 'rawAll',
   RSRC: 'rawSrc',
@@ -10,12 +10,10 @@ export default {
 
   FIELD: {
     number: { id: 0, icon: 'fa-hashtag', name: 'Number', vegaType: 'quantitative' }, // can be temporal
-    string: { id: 1, icon: 'fa-text-width', name: 'Text', vegaType: 'nominal' },
+    string: { id: 1, icon: 'fa-text-width', name: 'Text', vegaType: 'ordinal' },
     numberarray: { id: 2, icon: 'fa-list-ol', name: 'Number Array', vegaType: 'ordinal' },
     stringarray: { id: 3, icon: 'fa-list', name: 'Text Array', vegaType: 'ordinal' },
     object: { id: 4, icon: 'fa-list', name: 'Array', vegaType: 'ordinal' },
-    statfeature: { id: 5, icon: 'fa-calculator', name: 'Statistics', vegaType: 'quantitative' },
-    ctrfeature: { id: 6, icon: 'fa-asterisk', name: 'Counter', hide: true, vegaType: 'quantitative' },
     single: { id: 7, icon: 'fa-check', name: 'Single', hide: true, vegaType: 'nominal' },
     other: { id: 8, icon: 'fa-bar-chart', name: 'Other', vegaType: 'nominal' }
   },
@@ -68,9 +66,6 @@ export default {
     const entries = Object.entries(packetFields).map(([key, values]) => {
       if (values.length <= 1) {
         return [key, this.FIELD.single.id]; // special type: single
-      } else if (key.startsWith(FeatureExtractionService.CTR) || key.startsWith(FeatureExtractionService.STATS)) {
-        const typ = key.split(FeatureExtractionService.SEP)[0] + this.FEATURE;
-        return [key, this.FIELD[typ].id];
       } else if (values.every((v) => typeof values[0] === typeof v)) {
         return [key, this.FIELD[typeof values[0]].id];
       } else {
@@ -113,7 +108,18 @@ export default {
     }
     return fieldCount;
   },
+  loadPackets: function (query) {
+    return Vue.axios.get('api/sessions', {
+      params: {
+        ...query,
+        facets: false,
+        flatten: 1,
+        excludeFields: 'srcOui,dstOui,fileId,packetPos,fileId'
+      }
+    });
+  },
   loadPacketsRaw: async function (packetsMeta) {
+    if (packetsMeta.length === 0) return {}; // no packets to load
     const packetsRaw = new Array(packetsMeta.length); // result array
     const nodeSessionId = {};
     packetsMeta.filter((p) => p.totDataBytes).forEach((p) => {
@@ -123,35 +129,18 @@ export default {
     const promises = nodeSessionTuples.map(([node, sessionIds]) =>
       this.getRaw(node, sessionIds, Vue.axios.CancelToken.source().token));
     await Promise.all(promises).then((response) => {
-      const rd = Object.assign(...response.map((r) => r.data));
-      this.assignPackets(packetsMeta, rd, packetsRaw);
+      const respPackets = Object.assign(...response.map((r) => r.data));
+      for (const [idx, packet] of packetsMeta.entries()) {
+        const respSession = respPackets[packet.id];
+        const p = Object.fromEntries([[this.RALL, ''], [this.RSRC, ''], [this.RDST, '']]);
+        for (let i = 0; i < respSession?.length; i++) {
+          if (i % 2) p[this.RSRC] += respSession[i];
+          else p[this.RDST] += respSession[i];
+          p[this.RALL] += respSession[i];
+        }
+        packetsRaw[idx] = p;
+      }
     }, (err) => console.log(err));
     return packetsRaw;
-  },
-  assignPackets: function (packets, respPackets, packetsRaw) {
-    for (const [idx, packet] of packets.entries()) {
-      const respSession = respPackets[packet.id];
-      const p = Object.fromEntries([[this.RALL, ''], [this.RSRC, ''], [this.RDST, '']]);
-      for (let i = 0; i < respSession?.length; i++) {
-        if (i % 2) {
-          p[this.RSRC] += respSession[i];
-        } else {
-          p[this.RDST] += respSession[i];
-        }
-        p[this.RALL] += respSession[i];
-      }
-      packetsRaw[idx] = p;
-    }
-  },
-  vegaDatatypeOf: function (propName, fieldTypes) {
-    const fieldType = Object.values(this.FIELD)
-      .filter((ft) => ft.id === fieldTypes[propName])[0];
-    if (this.values && this.values[0] && fieldType.vegaType === 'quantitative') {
-      const v0 = this.values[0][propName];
-      if (v0 > 1000000000000 && v0 < 2000000000000) {
-        return 'temporal';
-      }
-    }
-    return fieldType.vegaType;
   }
 };

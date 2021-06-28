@@ -1,5 +1,5 @@
 <template>
-  <div id="vis" class="full">
+  <div id="vega-container" class="full">
     {{ fieldNames }}
   </div>
 </template>
@@ -30,12 +30,14 @@ export default {
   data: function () {
     return {
       mark: 'circle',
-      data: { values: [] } // pre-init valid
+      data: { values: [] }, // pre-init valid
+      width: 'container',
+      height: 'container'
     };
   },
   computed: {
     encoding: function () {
-      return Object.fromEntries(Object.entries(this.fieldNames)
+      const enc = Object.fromEntries(Object.entries(this.fieldNames)
         .filter(([propName, propValue]) => propValue && propName !== 'mark') // filter not null propname
         .map(([axisName, propValue]) =>
           [axisName, {
@@ -44,16 +46,21 @@ export default {
             scale: { zero: false }
           }]
         ));
+      if (enc.x && !enc.y) {
+        enc.x.bin = true;
+        enc.y = { aggregate: 'count' };
+        // this.mark = 'bar';
+      } else if (enc.y && !enc.x) {
+        enc.y.bin = true;
+        enc.x = { aggregate: 'count' };
+        // this.mark = 'bar';
+      }
+      return enc;
     },
     config: function () {
       const [bgc, fgc, prc] = ['background', 'foreground', 'primary']
         .map(cname => getComputedStyle(document.body).getPropertyValue('--color-' + cname));
       return {
-        resize: true,
-        autosize: {
-          type: 'fit',
-          contains: 'padding'
-        },
         background: bgc, // transparent
         group: { fill: fgc },
         symbol: { fill: prc },
@@ -74,20 +81,23 @@ export default {
   methods: {
     embed: function () {
       this.data.values = this.values;
-      return embed('#vis', this);
+      return embed('#vega-container', this);
     },
     datatypeOf: function (propName) {
-      return TEMPORAL_FIELDS.includes(propName)
+      console.log(propName);
+      const res = TEMPORAL_FIELDS.includes(propName)
         ? 'temporal'
         : Object.values(SpivisService.FIELD)
           .filter((ft) => ft.id === this.fieldTypes[propName])[0].vegaType;
+      console.log(res);
+      return res;
     }
   },
   watch: {
     values: function () { this.embed(); },
     fieldNames: {
       handler: function () {
-        this.mark = this.fieldNames.mark;
+        this.mark = { type: this.fieldNames.mark, tooltip: { content: 'data', size: '10%' } };
         this.embed();
       },
       deep: true
@@ -97,10 +107,18 @@ export default {
 };
 </script>
 
-<style scoped>
-canvas,
-.full {
+<style>
+canvas {
+  box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  -ms-box-sizing: border-box;
+}
+#vega-container {
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
