@@ -53,12 +53,11 @@ export default {
       } else if (enc.y && !enc.x) {
         enc.y.bin = true;
         enc.x = { aggregate: 'count' };
-        // this.mark = 'bar';
       }
       return enc;
     },
     config: function () {
-      const [bgc, fgc, prc] = ['background', 'foreground', 'primary']
+      const [bgc, fgc, prc] = ['background', 'foreground', 'secondary']
         .map(cname => getComputedStyle(document.body).getPropertyValue('--color-' + cname));
       return {
         background: bgc, // transparent
@@ -84,13 +83,12 @@ export default {
       return embed('#vega-container', this);
     },
     datatypeOf: function (propName) {
-      console.log(propName);
-      const res = TEMPORAL_FIELDS.includes(propName)
-        ? 'temporal'
-        : Object.values(SpivisService.FIELD)
+      console.log(this.fieldTypes[propName], this.fieldTypes[propName] !== undefined);
+      if (TEMPORAL_FIELDS.includes(propName)) return 'temporal';
+      else if (this.fieldTypes[propName] !== undefined) {
+        return Object.values(SpivisService.FIELD)
           .filter((ft) => ft.id === this.fieldTypes[propName])[0].vegaType;
-      console.log(res);
-      return res;
+      } else return 'quantitative'; // dim reduced stuff isn't in field-types
     }
   },
   watch: {

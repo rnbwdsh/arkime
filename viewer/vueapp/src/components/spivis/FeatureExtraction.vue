@@ -10,15 +10,17 @@
     <b-input-group prepend="Method">
       <b-select v-model="method" :options="['byte', 'symbol']"/>
     </b-input-group>
-    <b-table :items="table" :responsive="true" small
-             tbody-class="statTable" thead-class="statTable">
-      <!-- row label bold, rest to short numbers with K/M postfix -->
-      <template #cell()="data"> {{ data.value | humanReadableBits }}</template>
-    </b-table>
+    <div v-for="(values, fieldName) in table" :key="fieldName">
+      {{ fieldName }}
+      <SpivisButton  v-for="(count, name) in values" :key="name"
+                     :field-name="fieldName+SEP+name" :field-value="name"
+                     :badge-value="count | humanReadableBits"/>
+    </div>
   </b-card>
 </template>
 <script>
 import SpivisService from './SpivisService';
+import SpivisButton from './SpivisButton';
 const textEncoder = new TextEncoder();
 const LOOKUP_TABLE = { // used to generate LOOKUP + table headers for statistics
   C: 'control',
@@ -42,6 +44,7 @@ const LOOKUP = [...CHAR_CLASSES].map((pos) => LOOKUP_TABLE[pos]);
 
 export default {
   name: 'FeatureExtraction',
+  components: { SpivisButton },
   props: {
     dropPush: {},
     validator: {},
@@ -50,6 +53,7 @@ export default {
   },
   data: function () {
     return {
+      SEP: SpivisService.SEP,
       method: 'symbol',
       fields: [SpivisService.RSRC, SpivisService.RDST, SpivisService.RALL]
     };
@@ -65,7 +69,7 @@ export default {
             t[packetField][featureField] = t[packetField][featureField] || 0;
             t[packetField][featureField] += packetData;
           }));
-      return Object.values(t);
+      return t;
     }
   },
   watch: {

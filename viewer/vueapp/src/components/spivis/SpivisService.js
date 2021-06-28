@@ -118,7 +118,7 @@ export default {
       }
     });
   },
-  loadPacketsRaw: async function (packetsMeta) {
+  loadPacketsRaw: function (packetsMeta, packetsRawAssign, doneCb) {
     if (packetsMeta.length === 0) return {}; // no packets to load
     const packetsRaw = new Array(packetsMeta.length); // result array
     const nodeSessionId = {};
@@ -128,7 +128,7 @@ export default {
     const nodeSessionTuples = Object.entries(nodeSessionId);
     const promises = nodeSessionTuples.map(([node, sessionIds]) =>
       this.getRaw(node, sessionIds, Vue.axios.CancelToken.source().token));
-    await Promise.all(promises).then((response) => {
+    Promise.all(promises).then((response) => {
       const respPackets = Object.assign(...response.map((r) => r.data));
       for (const [idx, packet] of packetsMeta.entries()) {
         const respSession = respPackets[packet.id];
@@ -140,7 +140,9 @@ export default {
         }
         packetsRaw[idx] = p;
       }
-    }, (err) => console.log(err));
-    return packetsRaw;
+    }, (err) => console.log(err)).then(() => {
+      packetsRawAssign(packetsRaw);
+      doneCb();
+    });
   }
 };

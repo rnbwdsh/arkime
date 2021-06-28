@@ -27,14 +27,9 @@
                 <span :class="['fa', currentField.icon]"/> {{currentField.name}}
               </strong>
               <b-collapse :id="'coll-' + currentField.id" :visible="!currentField.hide">
-                <template v-for="fieldName in fieldNamesByCategory[currentField.id]"  >
-                  <b-button :key="fieldName" :name="fieldName"
-                            class="field-button" draggable="true" variant="default"
-                            @dragstart="dragStart" @mouseover="setTooltip" @click.prevent>
-                    {{fieldName | shortName }}
-                    <b-badge variant="default" > {{ packetFields[fieldName].length }} </b-badge>
-                  </b-button>
-                </template>
+                <SpivisButton v-for="name in fieldNamesByCategory[currentField.id]" :key="name"
+                              :field-value="name.replaceAll(SEP, '.')" :field-name="name"
+                              :badge-value="packetFields[name].length" :tooltip="setTooltip"/>
               </b-collapse>
             </b-card-text>
           </template>
@@ -43,36 +38,14 @@
 
       <!-- 2nd column: operations -->
       <b-col class="col-xl-2 col-lg-3 col-md-3 col-sm-4 col-xs-6" >
-        <FeatureExtraction :packets="packets" :featurePackets.sync="packetsFeatureExtracted"
+        <FeatureExtraction :packets="packets"
+                           :featurePackets.sync="packetsFeatureExtracted"
                            :drop-push="dropPush" :validator="validatorFieldString"/>
 
         <!-- dimensionality reduction -->
-        <b-card title="Dimensionality reduction"
-                @drop="dropPush($event, dimReductionFields, validatorFieldNumber)"
-                @dragenter.prevent @dragover.prevent>
-          <b-input-group prepend="Method">
-            <b-select v-model="dimReductionSelect" :options="['UMAP', 'TSNE', 'TriMap', 'PCA', 'LLE', 'LTSA', 'ISOMAP', 'FASTMAP','MDS', 'LSP', 'LDA', 'TopoMap', 'SAMMON']"/>
-          </b-input-group>
-          <b-form v-for="druidParam in Object.keys(dimReductionParams)" :key="druidParam">
-            <b-input-group :prepend="druidParam">
-              <b-input placeholder="default"/>
-            </b-input-group>
-          </b-form>
-
-          <b-form-tags v-model="dimReductionFields"
-                       placeholder="Enter valid Number fields"
-                       remove-on-delete
-                       tag-class="btn btn-default"
-                       @input="addWildcard"
-                       @tag-state="dimReductionTagState"/>
-            <ul v-if="dimReductionTagStateAutocomplete.length"  class="dropdown-menu show">
-              <b-dropdown-item v-for="option of dimReductionTagStateAutocomplete"
-                               :key="option"
-                               @click="dimReductionClick(option)">
-                  {{ option | shortName }}
-              </b-dropdown-item>
-            </ul>
-        </b-card>
+        <DimensionalityReduction :packets="packets" :field-types="fieldTypes"
+                                 :values.sync="dimReductionValues"
+                                 :drop-push="dropPush" :validator="validatorFieldNumber"/>
 
         <!-- clustering block -->
         <b-card title="Clustering & Outliers"
@@ -98,7 +71,8 @@
               <b-button v-model="vegaNames[vegaField]" :name="vegaField"
                         class="flex-fill" draggable="true" size="sm" variant="default"
                         @drop="dropPush($event, vegaNames, null)"
-                        @dblclick="vegaNames[vegaField] = ''" @dragstart="dragStart"
+                        @dblclick="vegaNames[vegaField] = ''"
+                        @dragstart="dragStart"
                         @click.prevent @dragenter.prevent @dragover.prevent>
                 {{ vegaNames[vegaField] }}
               </b-button>
@@ -123,7 +97,7 @@
                            :records-total="recordsTotal" :view="$route.query.view"
                            class="mt-5 mb-5"/>
 
-        <VegaLiteComponent :fieldNames="vegaNames" :fieldTypes="fieldTypes" :values="packets" />
+        <VegaLiteComponent :fieldNames="vegaNames" :fieldTypes="fieldTypes" :values="packetsVis" />
       </b-col>
     </b-row>
   </div>
@@ -132,26 +106,21 @@
 
 <script>
 
-// Custom external libaries
-import * as druid from '@saehrimnir/druidjs';
-// import services
-import ConfigService from '../utils/ConfigService';
 // import internal
+import ConfigService from '../utils/ConfigService';
 import MolochError from '../utils/Error';
 import MolochSearch from '../search/Search';
 import MolochLoading from '../utils/Loading';
 import MolochNoResults from '../utils/NoResults';
 import FieldService from '../search/FieldService';
 import VegaLiteComponent from '../visualizations/VegaLiteComponent';
-import SpivisService from './SpivisService';
 import MolochPaging from '../utils/Pagination';
 
-// special tags input
-import Vue from 'vue';
-import VoerroTagsInput from '@voerro/vue-tagsinput';
+// sub-components/services
+import SpivisService from './SpivisService';
 import FeatureExtraction from './FeatureExtraction';
-
-Vue.component('tags-input', VoerroTagsInput);
+import DimensionalityReduction from './DimensionalityReduction';
+import SpivisButton from './SpivisButton';
 
 let refreshInterval;
 let respondedAt; // the time that the last data load successfully responded
@@ -160,6 +129,8 @@ let pendingPromise; // save a pending promise to be able to cancel it
 export default {
   name: 'Spivis',
   components: {
+    SpivisButton,
+    DimensionalityReduction,
     FeatureExtraction,
     MolochPaging,
     VegaLiteComponent,
@@ -170,7 +141,8 @@ export default {
   },
   data: function () {
     return {
-      FIELD: [], // just to prevent linter errors
+      SEP: SpivisService.SEP,
+      FIELD: SpivisService.FIELD, // just to prevent linter errors
       error: '',
       fields: [],
       vegaNames: { x: '', y: '', row: '', column: '', size: '', color: '', shape: '', mark: 'circle' },
@@ -190,10 +162,6 @@ export default {
       fieldTypeCount: {},
 
       // dimensionality reduction data
-      dimReductionSelect: 'PCA',
-      dimReductionParams: {},
-      dimReductionFields: [],
-      dimReductionTagStateAutocomplete: [],
       dimReductionValues: [],
 
       clusterFields: [],
@@ -205,7 +173,11 @@ export default {
     packets: function () {
       return this.packetsMeta.map((packet, idx) => Object.assign({},
         packet,
-        this.packetsRaw[idx],
+        this.packetsRaw[idx]));
+    },
+    packetsVis: function () {
+      return this.packets.map((packet, idx) => Object.assign({},
+        packet,
         this.packetsFeatureExtracted[idx],
         this.dimReductionValues[idx]));
     },
@@ -229,24 +201,16 @@ export default {
     }
   },
   watch: {
-    packets: function (oldPackets, newPackets) {
+    packetsVis: function (oldPackets, newPackets) {
       if (!Object.keys(newPackets).length) return;
       oldPackets = Object.entries(oldPackets?.[0]).join('');
       newPackets = Object.entries(newPackets?.[0]).join('');
       if (oldPackets !== newPackets) {
         this.recomputeFields();
       }
-    },
-    dimReductionSelect: function () {
-      const druidMethod = new druid[this.dimReductionSelect]([[1]]);
-      const paramList = druidMethod.parameter_list || [];
-      this.dimReductionParams = Object.fromEntries(paramList.map((k) => [k, []]));
-      this.dimReduction();
-    },
-    dimReductionFields: function () { this.dimReduction(); }
+    }
   },
   created: function () {
-    this.FIELD = SpivisService.FIELD; // add fields non-reactive
     FieldService.get(true)
       .then((result) => {
         this.fields = result;
@@ -312,29 +276,9 @@ export default {
       }
     },
     /* event functions ----------------------------------------------------- */
-    dimReductionTagState: function (valid, invalid, duplicate) {
-      const complete = [...valid, ...invalid, ...duplicate][0];
-      if (!complete) this.dimReductionTagStateAutocomplete = [];
-      else {
-        this.dimReductionTagStateAutocomplete = Object.keys(this.fieldTypes)
-          .filter(this.validatorFieldNumber)
-          .filter((fn) => !this.dimReductionFields.includes(fn))
-          .filter((fn) => (fn.replaceAll(SpivisService.SEP, '')
-            .toLowerCase().includes(complete.toLowerCase())))
-          .sort();
-      }
-    },
-    dimReductionClick: function (option) {
-      this.dimReductionFields.push(option);
-      this.dimReductionTagStateAutocomplete.splice(this.dimReductionTagStateAutocomplete.indexOf(option));
-    },
-    addWildcard: function () {
-      if (this.dimReductionTagStateAutocomplete) {
-        const invalid = this.dimReductionFields.filter((p) => !this.validatorFieldNumber(p))[0];
-        const tmp = this.dimReductionFields.concat(this.dimReductionTagStateAutocomplete);
-        this.dimReductionTagStateAutocomplete = [];
-        this.dimReductionFields = tmp.filter((p) => p !== invalid);
-      }
+    dragStart: function (e) {
+      // custom datatype has no default action (unlike text/Plain that behaves like dropping a text file)
+      e.dataTransfer.setData('custom', e.target.name);
     },
     dropPush: function (e, targetArrayOrObj, validator) {
       const dragged = e.dataTransfer.getData('custom');
@@ -343,10 +287,6 @@ export default {
       } else {
         targetArrayOrObj[e.target.name] = dragged;
       }
-    },
-    dragStart: function (e) {
-      // custom datatype has no default action (unlike text/Plain that behaves like dropping a text file)
-      e.dataTransfer.setData('custom', e.target.name);
     },
     setTooltip: function (e) {
       let data = this.packetFields[e.target.name];
@@ -388,26 +328,8 @@ export default {
           this.error = error;
         });
     },
-    loadPacketsRaw: async function () {
-      this.packetsRaw = await SpivisService.loadPacketsRaw(this.packetsMeta);
-      this.recomputeFields();
-    },
-    dimReduction: function () {
-      if (this.dimReductionFields.length > 2) {
-        const data = this.packets
-          .map((packet) => this.dimReductionFields
-            .map((field) => packet[field] || 0));
-        const DR = new druid[this.dimReductionSelect](data, ...Object.values(this.dimReductionParams));
-        this.dimReductionValues = DR.transform().map((p) => Object.fromEntries([...p] // Float64 array to regular array
-          .map((val, idx) => ['dim' + idx, val])));
-      } else {
-        this.dimReductionValues = [];
-      }
-    }
-  },
-  filters: {
-    shortName: function (label) {
-      return label.replaceAll(SpivisService.SEP, '.');
+    loadPacketsRaw: function () {
+      SpivisService.loadPacketsRaw(this.packetsMeta, (x) => { this.packetsRaw = x; }, this.recomputeFields);
     }
   },
   beforeDestroy: function () {
@@ -426,37 +348,14 @@ export default {
   padding-top: 0.1rem;
 }
 
-/* spigraph content styles ------------------- */
-/* main graph/map */
-.field-button {
-  font-size: 75%;
-  margin: 5px 5px 0 0;
-  padding: 1px 2px;
-}
-
-.badge {
-  top: unset;
-  position: absolute;
-  transform: translate(-50%, -75%);
-  font-size: 80%;
-  padding: 0.2em 0.2em 0 0.2em;
-  background-color: var(--color-background);
-  border: 1px solid #ced4da;
-}
-.custom-select {
-  border: 1px solid #ced4da;
-}
-
 </style>
 
 <!-- tables are scoped, so scoped styles won't work on them -->
 <style>
-.dropdown-menu {
-  top: inherit;
-}
 
 /* sub components */
 .card { padding: 0.5rem; margin-bottom: 0.2rem }
 .card-body {padding: 0; }
 .card-title {width: 100%;}
+
 </style>
