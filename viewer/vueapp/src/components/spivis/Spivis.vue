@@ -27,9 +27,9 @@
                 <span :class="['fa', currentField.icon]"/> {{currentField.name}}
               </strong>
               <b-collapse :id="'coll-' + currentField.id" :visible="!currentField.hide">
-                <SpivisButton v-for="name in fieldNamesByCategory[currentField.id]" :key="name"
-                              :field-value="name.replaceAll(SEP, '.')" :field-name="name"
-                              :badge-value="packetFields[name].length" :tooltip="setTooltip"/>
+                <PacketFieldButton v-for="name in fieldNamesByCategory[currentField.id]" :key="name"
+                                   :label="name.replaceAll(SEP, '.')" :name="name"
+                                   :badge="packetFields[name].length" :tooltip="setTooltip"/>
               </b-collapse>
             </b-card-text>
           </template>
@@ -120,7 +120,7 @@ import MolochPaging from '../utils/Pagination';
 import SpivisService from './SpivisService';
 import FeatureExtraction from './FeatureExtraction';
 import DimensionalityReduction from './DimensionalityReduction';
-import SpivisButton from './SpivisButton';
+import PacketFieldButton from './PacketFieldButton';
 
 let refreshInterval;
 let respondedAt; // the time that the last data load successfully responded
@@ -129,7 +129,7 @@ let pendingPromise; // save a pending promise to be able to cancel it
 export default {
   name: 'Spivis',
   components: {
-    SpivisButton,
+    PacketFieldButton,
     DimensionalityReduction,
     FeatureExtraction,
     MolochPaging,

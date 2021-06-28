@@ -28,20 +28,20 @@
 
     <br/>
     <template v-if="values && values[0]">
-      <SpivisButton v-for="fieldName in Object.keys(values[0])"
-                    :key="fieldName"
-                    :field-name="fieldName"/>
+      <PacketFieldButton v-for="fieldName in Object.keys(values[0])"
+                         :key="fieldName"
+                         :name="fieldName"/>
     </template>
   </b-card>
 </template>
 <script>
 import SpivisService from './SpivisService';
 import * as druid from '@saehrimnir/druidjs';
-import SpivisButton from './SpivisButton';
+import PacketFieldButton from './PacketFieldButton';
 
 export default {
   name: 'DimensionalityReduction',
-  components: { SpivisButton },
+  components: { PacketFieldButton },
   props: {
     packets: {},
     fieldTypes: {},

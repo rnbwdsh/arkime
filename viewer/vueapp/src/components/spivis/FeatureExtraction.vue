@@ -12,15 +12,15 @@
     </b-input-group>
     <div v-for="(values, fieldName) in table" :key="fieldName">
       {{ fieldName }}
-      <SpivisButton  v-for="(count, name) in values" :key="name"
-                     :field-name="fieldName+SEP+name" :field-value="name"
-                     :badge-value="count | humanReadableBits"/>
+      <PacketFieldButton v-for="(count, name) in values" :key="name"
+                         :name="fieldName+SEP+name" :label="name"
+                         :badge="count | humanReadableBits"/>
     </div>
   </b-card>
 </template>
 <script>
 import SpivisService from './SpivisService';
-import SpivisButton from './SpivisButton';
+import PacketFieldButton from './PacketFieldButton';
 const textEncoder = new TextEncoder();
 const LOOKUP_TABLE = { // used to generate LOOKUP + table headers for statistics
   C: 'control',
@@ -44,7 +44,7 @@ const LOOKUP = [...CHAR_CLASSES].map((pos) => LOOKUP_TABLE[pos]);
 
 export default {
   name: 'FeatureExtraction',
-  components: { SpivisButton },
+  components: { PacketFieldButton },
   props: {
     dropPush: {},
     validator: {},

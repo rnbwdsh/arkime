@@ -1,28 +1,24 @@
 <template>
-  <b-button :name="fieldName"
+  <b-button :name="name"
             class="field-button" draggable="true" variant="default"
             @click.prevent @mouseover="tooltip"
-            @dragstart="e.dataTransfer.setData('custom', e.target.name);">
-    {{fieldValue.replaceAll(SEP, ".") }}
-    <b-badge v-if="badgeValue" variant="default" > {{ badgeValue }} </b-badge>
+            @dragstart="dragStart">
+    {{label.replaceAll(SEP, ".") }}
+    <b-badge v-if="badge" variant="default" > {{ badge }} </b-badge>
   </b-button>
 </template>
 <script>
 import SpivisService from './SpivisService';
 
 export default {
-  name: 'SpivisButton',
+  name: 'PacketFieldButton',
   props: {
-    fieldName: {},
-    fieldValue: { default: () => this.fieldName },
-    badgeValue: { default: null },
+    name: {},
+    label: { default: () => this.name },
+    badge: { default: null },
     tooltip: { default: () => function () {} }
   },
-  data: function () {
-    return {
-      SEP: SpivisService.SEP
-    };
-  },
+  data: function () { return { SEP: SpivisService.SEP }; },
   methods: {
     dragStart: function (e) {
       e.dataTransfer.setData('custom', e.target.name);
